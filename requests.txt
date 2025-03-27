@@ -1,0 +1,5 @@
+INSERT INTO users (name, email) VALUES ('Ivan Ivanov', 'ivan@example.ru');
+SELECT * FROM users WHERE id = 1;
+INSERT INTO users (name, email) VALUES ('Petr Petrov', 'petr@example.ru');
+SELECT * FROM users WHERE id = 2;
+INSERT INTO users (name, email) VALUES ('Alex Sidorov', 'alex@example.ru');
