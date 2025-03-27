@@ -29,6 +29,7 @@ private:
   // Функция для отключения от базы данных PostgreSQL
   void disconnectFromDatabase();
 
+  // Обработка запроса от клиента к базе данных
   void handleRequest(const std::string& request, int socket);
   // Парсинг и логирование запросов к базе данных
   void parseAndLogRequest(const std::string& request) const;

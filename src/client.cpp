@@ -22,8 +22,8 @@ bool Client::connectToServer(const char* host, uint16_t port) {
     }
 
     m_server_addr.sin_family = AF_INET;
-    m_server_addr.sin_port = htons(port); // Стандартный порт PostgreSQL
-    inet_pton(AF_INET, "127.0.0.1", &m_server_addr.sin_addr);
+    m_server_addr.sin_port = htons(port);
+    inet_pton(AF_INET, host, &m_server_addr.sin_addr);
 
     if (connect(m_sock, (struct sockaddr*)&m_server_addr, sizeof(m_server_addr)) < 0) {
         std::cerr << "Ошибка установки соединения" << std::endl;
@@ -55,9 +55,6 @@ void Client::run() {
             continue;
         }
 
-        // Выводим в консоль полученный запрос
-        std::cout << "REQUEST: " << request << std::endl;
-
         // Отправляем запрос на сервер
         ssize_t send_bytes = send(m_sock, request.c_str(), request.size(), 0);
         if (send_bytes < 0) {
@@ -77,7 +74,7 @@ void Client::run() {
         response[received_bytes] = '\0';
 
         // Выводим результат
-        std::cout << "Response from server:\n" << response << std::endl;
+        std::cout << "Ответ сервера:\n" << response << std::endl;
     }
 
     in.close();
