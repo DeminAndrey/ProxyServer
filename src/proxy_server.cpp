@@ -13,13 +13,14 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-constexpr int MAX_CONNECTIONS = 1000;
+constexpr int BACKLOG_SIZE = 5;
 constexpr int BUF_SIZE = 1024;
+constexpr int MAX_CONNECTIONS = 1000;
 constexpr int PORT = 5433;
-const char* LOG_FILE_PATH = "queries.log";
+const char* LOG_FILE = "queries.log";
 
 namespace {
-struct DataBaseConnectionConfig {
+struct DataBaseConnectionInfo {
     const char* host = "localhost";
     const char* port = "5432";
     const char* user = "my_user";
@@ -61,7 +62,7 @@ bool ProxyServer::start() {
         return false;
     }
 
-    if (listen(serverSocket, 5) != 0) {
+    if (listen(serverSocket, BACKLOG_SIZE) != 0) {
         perror("listen");
         close(serverSocket);
         return false;
@@ -70,24 +71,24 @@ bool ProxyServer::start() {
     std::cout << "Proxy server started on port " << PORT << "\n";
 
     while (true) {
-        struct pollfd fds[MAX_CONNECTIONS + 1];
-        int nfds = 0;
-        fds[nfds].fd = serverSocket;
-        fds[nfds].events = POLLIN;
-        nfds++;
+        struct pollfd clients[MAX_CONNECTIONS + 1];
+        int conns = 0;
+        clients[conns].fd = serverSocket;
+        clients[conns].events = POLLIN;
+        conns++;
 
-        for (;;) {
-            int pollResult = poll(fds, nfds, -1);
+        while (true) {
+            int pollResult = poll(clients, conns, -1);
             if (pollResult == -1) {
                 perror("poll");
                 break;
             } else if (pollResult > 0) {
-                for (int i = 0; i < nfds; ++i) {
-                    if (fds[i].revents & POLLIN) {
-                        if (fds[i].fd == serverSocket) {
-                            struct sockaddr_storage their_addr;
-                            socklen_t addr_size = sizeof(their_addr);
-                            int newSocket = accept(serverSocket, (struct sockaddr *)&their_addr, &addr_size);
+                for (int i = 0; i < conns; ++i) {
+                    if (clients[i].revents & POLLIN) {
+                        if (clients[i].fd == serverSocket) {
+                            struct sockaddr_storage server_addr;
+                            socklen_t addr_size = sizeof(server_addr);
+                            int newSocket = accept(serverSocket, (struct sockaddr *)&server_addr, &addr_size);
                             if (newSocket == -1) {
                                 perror("accept");
                                 continue;
@@ -95,30 +96,29 @@ bool ProxyServer::start() {
 
                             std::cout << "New connection accepted\n";
 
-                            fds[nfds].fd = newSocket;
-                            fds[nfds].events = POLLIN;
-                            nfds++;
+                            clients[conns].fd = newSocket;
+                            clients[conns].events = POLLIN;
+                            conns++;
 
-                            if (nfds >= MAX_CONNECTIONS) {
-                                std::cerr << "Too many connections\n";
+                            if (conns >= MAX_CONNECTIONS) {
+                                std::cerr << "Превышен допустимый предел соединений\n";
                                 break;
                             }
                         }
                         else {
                             char buffer[BUF_SIZE];
-                            ssize_t bytesRead = recv(fds[i].fd, buffer, sizeof(buffer), 0);
+                            ssize_t bytesRead = recv(clients[i].fd, buffer, sizeof(buffer), 0);
                             if (bytesRead <= 0) {
                                 if (bytesRead == 0) {
-                                    std::cout << "Connection closed by client\n";
+                                    std::cout << "Соединение закрыто клиентом\n";
                                 } else {
                                     perror("recv");
                                 }
-                                close(fds[i].fd);
-                                fds[i] = fds[nfds-1];
-                                nfds--;
+                                close(clients[i].fd);
+                                clients[i] = clients[conns - 1];
+                                conns--;
                             } else {
-                                std::cout << fds[nfds].fd << std::endl;
-                                handleRequest(std::string(buffer, bytesRead), fds[nfds].fd);
+                                handleRequest(std::string(buffer, bytesRead), clients[conns].fd);
                             }
                         }
                     }
@@ -139,7 +139,7 @@ void ProxyServer::handleRequest(const std::string& request, int socket) {
 }
 
 PGconn* ProxyServer::connectToDatabase() const {
-    DataBaseConnectionConfig conf;
+    DataBaseConnectionInfo conf;
     char conninfo[256];
     snprintf(conninfo, sizeof(conninfo),
              "host='%s' port='%s' user='%s' password='%s' dbname='%s'",
@@ -163,9 +163,9 @@ void ProxyServer::disconnectFromDatabase() {
 }
 
 void ProxyServer::parseAndLogRequest(const std::string& request) const {
-    static std::ofstream log(LOG_FILE_PATH, std::ios::app);
+    static std::ofstream log(LOG_FILE, std::ios::app);
     if (!log.is_open()) {
-        std::cerr << "Failed to open log file\n";
+        std::cerr << "Ошибка открытия файла: " << LOG_FILE << std::endl;
         return;
     }
     log << request << std::endl;
@@ -173,15 +173,19 @@ void ProxyServer::parseAndLogRequest(const std::string& request) const {
 
 void ProxyServer::sendToDatabase(const std::string& request, int socket) {
     if (PQstatus(m_pgConn) != CONNECTION_OK) {
-        std::cerr << "Connection to database failed: " << PQerrorMessage(m_pgConn) << std::endl;
+        std::cerr << "Не удалось подключиться к базе данных: " << PQerrorMessage(m_pgConn) << std::endl;
         return;
     }
 
     PGresult* result = PQexec(m_pgConn, request.c_str());
     if (PQresultStatus(result) != PGRES_TUPLES_OK && PQresultStatus(result) != PGRES_COMMAND_OK) {
         std::string errorMessage = PQresultErrorField(result, PG_DIAG_MESSAGE_PRIMARY);
-        send(socket, errorMessage.c_str(), errorMessage.size(), 0);
-        std::cerr << "Query failed: " << errorMessage << std::endl;
+        std::cerr << "Ошибка запроса: " << errorMessage << std::endl;
+        ssize_t send_bytes = send(socket, errorMessage.c_str(), errorMessage.size(), 0);
+        if (send_bytes < 0) {
+            std::cerr << "Ошибка отправки данных: "
+                      << std::system_category().message(errno) << std::endl;
+        }
         PQclear(result);
     }
 
@@ -191,14 +195,20 @@ void ProxyServer::sendToDatabase(const std::string& request, int socket) {
     if (PQntuples(result) > 0) {
         for (int i = 0; i < numTuples; ++i) {
             for (int j = 0; numFields; ++j) {
-                send(socket, PQgetvalue(result, i, j), strlen(PQgetvalue(result, i, j)), 0);
+                ssize_t send_bytes = send(socket, PQgetvalue(result, i, j), strlen(PQgetvalue(result, i, j)), 0);
+                if (send_bytes < 0) {
+                    std::cerr << "Ошибка отправки данных: "
+                              << std::system_category().message(errno) << std::endl;
+                    break;
+                }
+                else if (send_bytes == 0) {
+                    std::cerr << "Соединение закрыто клиентом" << std::endl;
+                    break;
+                }
                 send(socket, " ", 1, 0);
             }
             std::cout << std::endl;
         }
-    }
-    else {
-        send(socket, "No result!\n", 16, 0);
     }
 
     if (result)

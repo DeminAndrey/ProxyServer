@@ -1,5 +1,5 @@
-INSERT INTO users (name, email) VALUES ('Ivan Ivanov', 'ivan@example.ru');
+INSERT INTO users (name, email) VALUES ('User$RANDOM', 'user$RANDOM@example.com');
 SELECT * FROM users WHERE id = 1;
-INSERT INTO users (name, email) VALUES ('Petr Petrov', 'petr@example.ru');
+INSERT INTO users (name, email) VALUES ('User$RANDOM', 'user$RANDOM@example.com');
 SELECT * FROM users WHERE id = 2;
-INSERT INTO users (name, email) VALUES ('Alex Sidorov', 'alex@example.ru');
+INSERT INTO users (name, email) VALUES ('User$RANDOM', 'user$RANDOM@example.com');
