@@ -29,12 +29,14 @@ private:
   // Функция для отключения от базы данных PostgreSQL
   void disconnectFromDatabase();
 
+  // Проверка является ли строка языком SQL
+  bool isSQL(const std::string& data) const;
   // Обработка запроса от клиента к базе данных
   void handleRequest(const std::string& request, int socket);
   // Парсинг и логирование запросов к базе данных
   void parseAndLogRequest(const std::string& request) const;
-  // Отправка запросов к базе данных
-  void sendToDatabase(const std::string& request, int socket);
+  // Выполнение запроса к базе данных и обработка ответа
+  void execRequestAndSendResponse(const std::string& request, int socket);
 
   PGconn* m_pgConn = nullptr;
 };

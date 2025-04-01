@@ -9,6 +9,7 @@
 #include <iostream>
 #include <netinet/in.h>
 #include <poll.h>
+#include <regex>
 #include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -131,11 +132,16 @@ bool ProxyServer::start() {
 }
 
 void ProxyServer::handleRequest(const std::string& request, int socket) {
+    if (!isSQL(request)) {
+        std::cerr << "Сообщение не является языком SQL" << std::endl;
+        return;
+    }
     parseAndLogRequest(request);
     if (!socket) {
         std::cerr << "Получен недействительный или нулевой дескриптор сокета" << std::endl;
+        return;
     }
-    sendToDatabase(request, socket);
+    execRequestAndSendResponse(request, socket);
 }
 
 PGconn* ProxyServer::connectToDatabase() const {
@@ -162,6 +168,12 @@ void ProxyServer::disconnectFromDatabase() {
     }
 }
 
+bool ProxyServer::isSQL(const std::string& data) const {
+    // Регулярное выражение для поиска ключевых слов SQL
+    std::regex sqlRegex("(?i)\\b(SELECT|INSERT|UPDATE|DELETE)\\b");
+    return std::regex_search(data, sqlRegex);
+}
+
 void ProxyServer::parseAndLogRequest(const std::string& request) const {
     static std::ofstream log(LOG_FILE, std::ios::app);
     if (!log.is_open()) {
@@ -171,7 +183,7 @@ void ProxyServer::parseAndLogRequest(const std::string& request) const {
     log << request << std::endl;
 }
 
-void ProxyServer::sendToDatabase(const std::string& request, int socket) {
+void ProxyServer::execRequestAndSendResponse(const std::string& request, int socket) {
     if (PQstatus(m_pgConn) != CONNECTION_OK) {
         std::cerr << "Не удалось подключиться к базе данных: " << PQerrorMessage(m_pgConn) << std::endl;
         return;
@@ -187,6 +199,8 @@ void ProxyServer::sendToDatabase(const std::string& request, int socket) {
                       << std::system_category().message(errno) << std::endl;
         }
         PQclear(result);
+
+        return;
     }
 
     int numTuples = PQntuples(result);
@@ -195,6 +209,8 @@ void ProxyServer::sendToDatabase(const std::string& request, int socket) {
     // Проверка на наличие данных
     if (numTuples == 0) {
         send(socket, "No results returned.\n", 22, 0);
+        PQclear(result);
+
         return;
     }
 
@@ -236,6 +252,5 @@ void ProxyServer::sendToDatabase(const std::string& request, int socket) {
         send(socket, "\n", 1, 0);
     }
 
-    if (result)
-        PQclear(result);
+    PQclear(result);
 }
