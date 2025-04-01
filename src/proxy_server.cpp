@@ -142,7 +142,7 @@ PGconn* ProxyServer::connectToDatabase() const {
     DataBaseConnectionInfo conf;
     char conninfo[256];
     snprintf(conninfo, sizeof(conninfo),
-             "host='%s' port='%s' user='%s' password='%s' dbname='%s'",
+             "host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode=disable",
              conf.host, conf.port, conf.user, conf.password, conf.dbname);
     PGconn* conn = PQconnectdb(conninfo);
 

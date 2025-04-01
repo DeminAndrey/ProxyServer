@@ -24,7 +24,7 @@ public:
   void stop();
 
 private:
-  // Функция для подключения к базе данных PostgreSQL
+  // Функция для подключения к базе данных PostgreSQL, отключает шифрование SSL
   PGconn* connectToDatabase() const;
   // Функция для отключения от базы данных PostgreSQL
   void disconnectFromDatabase();
