@@ -9,7 +9,6 @@
 #include <iostream>
 #include <netinet/in.h>
 #include <poll.h>
-#include <regex>
 #include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -132,16 +131,13 @@ bool ProxyServer::start() {
 }
 
 void ProxyServer::handleRequest(const std::string& request, int socket) {
-    if (!isSQL(request)) {
-        std::cerr << "Сообщение не является языком SQL" << std::endl;
-        return;
+    if (!request.empty() && request.front() == 'Q') {
+        std::string sqlQuery = request.substr(1); // Извлекаем SQL-запрос
+        logOutQuery(sqlQuery);
+        execQueryAndSendResponse(sqlQuery, socket);
+    } else {
+        std::cout << "Принятый пакет не содержит SQL-запрос" << std::endl;
     }
-    parseAndLogRequest(request);
-    if (!socket) {
-        std::cerr << "Получен недействительный или нулевой дескриптор сокета" << std::endl;
-        return;
-    }
-    execRequestAndSendResponse(request, socket);
 }
 
 PGconn* ProxyServer::connectToDatabase() const {
@@ -168,13 +164,7 @@ void ProxyServer::disconnectFromDatabase() {
     }
 }
 
-bool ProxyServer::isSQL(const std::string& data) const {
-    // Регулярное выражение для поиска ключевых слов SQL
-    std::regex sqlRegex("(?i)\\b(SELECT|INSERT|UPDATE|DELETE)\\b");
-    return std::regex_search(data, sqlRegex);
-}
-
-void ProxyServer::parseAndLogRequest(const std::string& request) const {
+void ProxyServer::logOutQuery(const std::string& request) const {
     static std::ofstream log(LOG_FILE, std::ios::app);
     if (!log.is_open()) {
         std::cerr << "Ошибка открытия файла: " << LOG_FILE << std::endl;
@@ -183,7 +173,7 @@ void ProxyServer::parseAndLogRequest(const std::string& request) const {
     log << request << std::endl;
 }
 
-void ProxyServer::execRequestAndSendResponse(const std::string& request, int socket) {
+void ProxyServer::execQueryAndSendResponse(const std::string& request, int socket) {
     if (PQstatus(m_pgConn) != CONNECTION_OK) {
         std::cerr << "Не удалось подключиться к базе данных: " << PQerrorMessage(m_pgConn) << std::endl;
         return;

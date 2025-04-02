@@ -24,19 +24,17 @@ public:
   void stop();
 
 private:
-  // Функция для подключения к базе данных PostgreSQL, отключает шифрование SSL
+  // Функция для подключения к базе данных PostgreSQL с опцией отключения шифрования SSL
   PGconn* connectToDatabase() const;
   // Функция для отключения от базы данных PostgreSQL
   void disconnectFromDatabase();
 
-  // Проверка является ли строка языком SQL
-  bool isSQL(const std::string& data) const;
   // Обработка запроса от клиента к базе данных
   void handleRequest(const std::string& request, int socket);
-  // Парсинг и логирование запросов к базе данных
-  void parseAndLogRequest(const std::string& request) const;
+  // Логирование запроса к базе данных в лог-файл
+  void logOutQuery(const std::string& request) const;
   // Выполнение запроса к базе данных и обработка ответа
-  void execRequestAndSendResponse(const std::string& request, int socket);
+  void execQueryAndSendResponse(const std::string& request, int socket);
 
   PGconn* m_pgConn = nullptr;
 };
